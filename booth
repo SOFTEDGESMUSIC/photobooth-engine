@@ -1,0 +1,41 @@
+#!/bin/bash
+
+JOB_DIR="$HOME/photobooth/jobs/260314_BIRTHDAYPARTY"
+JOB_NAME="260314_BIRTHDAYPARTY"
+
+ENGINE="$HOME/photobooth/engine/capture_controller.py"
+
+case "$1" in
+
+start)
+python3 $ENGINE \
+--job-dir $JOB_DIR \
+--job-name $JOB_NAME
+;;
+
+manual)
+python3 $ENGINE \
+--job-dir $JOB_DIR \
+--job-name $JOB_NAME \
+--manual
+;;
+
+status)
+cat $JOB_DIR/status.json
+;;
+
+reset)
+echo "Resetting booth state..."
+rm -f $JOB_DIR/status.json
+echo "Done"
+;;
+
+*)
+echo "Usage:"
+echo "booth start"
+echo "booth manual"
+echo "booth status"
+echo "booth reset"
+;;
+
+esac

@@ -1,0 +1,26 @@
+# Job data
+jobs/
+
+# Python cache / venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Logs
+*.log
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Temporary exports
+tmp/
+temp/
+
+# Local backups
+*.bak
