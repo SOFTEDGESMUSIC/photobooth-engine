@@ -24,3 +24,6 @@ temp/
 
 # Local backups
 *.bak
+
+# Top-level test capture folder
+raw/
