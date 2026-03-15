@@ -1,81 +1,94 @@
 #!/usr/bin/env python3
 
-from pathlib import Path
-from PIL import Image
+from __future__ import annotations
+
 import argparse
+from pathlib import Path
+from typing import List
+from PIL import Image
 
-PRINT_WIDTH = 1240
-PRINT_HEIGHT = 1860
-PHOTO_COUNT = 4
+W, H = 1200, 1800          # 4x6" @ 300 dpi
+MX, MY = 30, 100           # side / top margins
+GAP = 20
+COLS, ROWS = 2, 2
+CELL_W = (W - 2 * MX - GAP) // COLS
+CELL_H = int(CELL_W * 5 / 4)
+SAFE_INSET_X = 30
+SAFE_INSET_Y = 30
 
-
-def crop_to_ratio(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
-    src_w, src_h = img.size
-    src_ratio = src_w / src_h
-    target_ratio = target_w / target_h
-
-    if src_ratio > target_ratio:
-        # too wide
-        new_w = int(src_h * target_ratio)
-        left = (src_w - new_w) // 2
-        return img.crop((left, 0, left + new_w, src_h))
-    else:
-        # too tall
-        new_h = int(src_w / target_ratio)
-        top = (src_h - new_h) // 2
-        return img.crop((0, top, src_w, top + new_h))
+def open_image_safely(path: Path) -> Image.Image:
+    return Image.open(path).convert("RGB")
 
 
-def create_layout(jpg_files, print_path: Path, rotate_for_printer: bool = False):
-    margin_x = 40
-    margin_y = 40
-    gap = 20
+def find_overlay(job_dir: Path) -> Path | None:
+    overlay_dir = job_dir / "overlay"
+    if not overlay_dir.exists():
+        return None
 
-    cell_width = PRINT_WIDTH - (margin_x * 2)
-    usable_height = PRINT_HEIGHT - (margin_y * 2) - (gap * (PHOTO_COUNT - 1))
-    cell_height = usable_height // PHOTO_COUNT
+    pngs = sorted(overlay_dir.glob("*.png"))
+    return pngs[0] if pngs else None
 
-    canvas = Image.new("RGB", (PRINT_WIDTH, PRINT_HEIGHT), (255, 255, 255))
 
-    for i, jpg in enumerate(jpg_files):
-        img = Image.open(jpg).convert("RGB")
-        img = crop_to_ratio(img, 4, 5)
-        img = img.resize((cell_width, cell_height), Image.LANCZOS)
+def build_layout(job_dir: Path, jpg_files: List[Path], print_path: Path) -> Path:
+    if len(jpg_files) != 4:
+        raise ValueError(f"Layout engine requires exactly 4 JPG files, got {len(jpg_files)}")
 
-        y = margin_y + i * (cell_height + gap)
-        canvas.paste(img, (margin_x, y))
+    canvas = Image.new("RGB", (W, H), "white")
 
-    if rotate_for_printer:
-        canvas = canvas.transpose(Image.Transpose.ROTATE_90)
+    for idx, img_path in enumerate(jpg_files):
+        with open_image_safely(img_path) as img:
+            img = img.resize((CELL_W, CELL_H), Image.LANCZOS)
+
+        col = idx % COLS
+        row = idx // COLS
+        x = MX + col * (CELL_W + GAP)
+        y = MY + row * (CELL_H + GAP)
+        canvas.paste(img, (x, y))
+
+    overlay_path = find_overlay(job_dir)
+    if overlay_path:
+        with Image.open(overlay_path).convert("RGBA") as ov:
+            canvas = canvas.convert("RGBA")
+            ov = ov.resize(canvas.size, Image.LANCZOS)
+            canvas.alpha_composite(ov)
+            canvas = canvas.convert("RGB")
+
+    # apply calibrated safe inset for the QW410 Linux/Gutenprint path
+    safe_w = W - (SAFE_INSET_X * 2)
+    safe_h = H - (SAFE_INSET_Y * 2)
+
+    scaled = canvas.resize((safe_w, safe_h), Image.LANCZOS)
+
+    final_canvas = Image.new("RGB", (W, H), "white")
+    final_canvas.paste(scaled, (SAFE_INSET_X, SAFE_INSET_Y))
 
     print_path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(
+    final_canvas.save(
         print_path,
         "JPEG",
         quality=95,
+        dpi=(300, 300),
         subsampling=0,
-        dpi=(310, 310),
     )
 
     print(f"LAYOUT CREATED -> {print_path}")
+    return print_path
 
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--job-dir")
-    parser.add_argument("--job-name")
-    parser.add_argument("--print-path", required=True)
-    parser.add_argument("--jpg-files", nargs="+", required=True)
-    parser.add_argument("--rotate-for-printer", action="store_true")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build 2x2 4:5 portrait grid on 1200x1800 canvas")
+    parser.add_argument("--job-dir", required=True, help="Path to job directory")
+    parser.add_argument("--print-path", required=True, help="Output print JPG path")
+    parser.add_argument("--jpg-files", nargs=4, required=True, help="Exactly 4 JPG input files")
     args = parser.parse_args()
 
-    jpg_files = args.jpg_files[:PHOTO_COUNT]
-    create_layout(
-        jpg_files=jpg_files,
-        print_path=Path(args.print_path),
-        rotate_for_printer=args.rotate_for_printer,
-    )
+    job_dir = Path(args.job_dir).expanduser().resolve()
+    print_path = Path(args.print_path).expanduser().resolve()
+    jpg_files = [Path(p).expanduser().resolve() for p in args.jpg_files]
+
+    out = build_layout(job_dir, jpg_files, print_path)
+    print(f"Layout created: {out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
