@@ -282,6 +282,13 @@ def run_layout_engine(job_dir: Path, job_name: str, status_file: Path, last_capt
     print_name = build_print_name(job_name, print_counter)
     print_path = job_dir / "prints" / print_name
 
+    jpg_files = [
+        job_dir / "jpg" / f"{build_capture_name(job_name, last_capture_number - 3)}.jpg",
+        job_dir / "jpg" / f"{build_capture_name(job_name, last_capture_number - 2)}.jpg",
+        job_dir / "jpg" / f"{build_capture_name(job_name, last_capture_number - 1)}.jpg",
+        job_dir / "jpg" / f"{build_capture_name(job_name, last_capture_number)}.jpg",
+    ]
+
     update_status(
         status_file,
         job_name=job_name,
@@ -296,7 +303,21 @@ def run_layout_engine(job_dir: Path, job_name: str, status_file: Path, last_capt
         job_dir=job_dir,
     )
 
-    logging.info("LAYOUT ENGINE WOULD RUN HERE -> %s", print_path)
+    cmd = [
+        "python3",
+        str(Path(__file__).parent / "layout_engine.py"),
+        "--job-dir",
+        str(job_dir),
+        "--job-name",
+        job_name,
+        "--print-path",
+        str(print_path),
+        "--jpg-files",
+        *[str(p) for p in jpg_files],
+    ]
+
+    run_cmd(cmd, check=True)
+    logging.info("LAYOUT CREATED -> %s", print_path)
 
     update_status(
         status_file,
@@ -312,8 +333,14 @@ def run_layout_engine(job_dir: Path, job_name: str, status_file: Path, last_capt
         job_dir=job_dir,
     )
 
-    logging.info("PRINT WOULD BE SENT HERE -> %s", print_path)
-
+    subprocess.run([
+        "python3",
+        "/home/redsparrow/photobooth/engine/print_engine.py",
+        "--print-file",
+        str(print_path),
+        "--printer",
+        "DNP_QW410",
+    ])
     update_status(
         status_file,
         job_name=job_name,
@@ -328,7 +355,6 @@ def run_layout_engine(job_dir: Path, job_name: str, status_file: Path, last_capt
         last_print_file=str(print_path),
         job_dir=job_dir,
     )
-
 
 def run_sequence(job_dir: Path, job_name: str, hook_cmd: Optional[str], manual: bool = False) -> List[Path]:
     global ABORT_REQUESTED
