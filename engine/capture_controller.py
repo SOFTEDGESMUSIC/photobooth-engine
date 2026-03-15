@@ -308,8 +308,6 @@ def run_layout_engine(job_dir: Path, job_name: str, status_file: Path, last_capt
         str(Path(__file__).parent / "layout_engine.py"),
         "--job-dir",
         str(job_dir),
-        "--job-name",
-        job_name,
         "--print-path",
         str(print_path),
         "--jpg-files",
@@ -340,7 +338,9 @@ def run_layout_engine(job_dir: Path, job_name: str, status_file: Path, last_capt
         str(print_path),
         "--printer",
         "DNP_QW410",
-    ])
+    ], check=True)
+    logging.info("PRINT SENT -> %s", print_path)
+    
     update_status(
         status_file,
         job_name=job_name,
@@ -553,7 +553,9 @@ def run_sequence(job_dir: Path, job_name: str, hook_cmd: Optional[str], manual: 
 
     except Exception as exc:
         logging.error("Capture sequence failed: %s", exc)
-        remove_partial_files(captured_files)
+        # Only delete files if capture itself failed before a full 4-shot batch completed.
+        if len(captured_files) < SHOTS_PER_SEQUENCE:
+            remove_partial_files(captured_files)
 
         update_status(
             paths["status"],
